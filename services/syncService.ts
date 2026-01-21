@@ -17,7 +17,9 @@ class SyncService {
   }
 
   private connect() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Robustly switch protocol: http -> ws, https -> wss
+    // This prevents mixed content errors when running on HTTPS
+    const protocol = window.location.protocol.replace(/^http/, 'ws');
     const host = window.location.host;
     // Connect to the worker's WebSocket endpoint
     const wsUrl = `${protocol}//${host}/api/sync`;
@@ -57,6 +59,7 @@ class SyncService {
 
     this.ws.onerror = (e) => {
       // Error will usually trigger close, which triggers reconnect
+      console.error("WebSocket error", e);
     };
   }
 
