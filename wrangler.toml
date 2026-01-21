@@ -15,6 +15,6 @@ bindings = [
 tag = "v1"
 new_sqlite_classes = ["SyncPadDO"]
 
-# Configuration for serving static assets (if using Workers Sites)
-[site]
-bucket = "./dist"
+# Modern assets configuration
+# This binds the static files in ./dist to env.ASSETS in the worker
+assets = { directory = "./dist", binding = "ASSETS" }
