@@ -17,17 +17,30 @@ class SyncService {
   }
 
   private connect() {
-    // Robustly switch protocol: http -> ws, https -> wss
-    // This prevents mixed content errors when running on HTTPS
-    const protocol = window.location.protocol.replace(/^http/, 'ws');
+    if (typeof window === 'undefined') return;
+
+    // 1. Determine safe WebSocket protocol (ws: or wss:)
+    const isSecure = window.location.protocol === 'https:';
+    const wsProtocol = isSecure ? 'wss:' : 'ws:';
     const host = window.location.host;
-    // Connect to the worker's WebSocket endpoint
-    const wsUrl = `${protocol}//${host}/api/sync`;
+
+    // 2. Handle Environments where relative WebSocket paths are impossible
+    // (e.g., local file system 'file:', or code preview blobs 'blob:')
+    // In these cases, we cannot connect to the worker, so we default to offline mode.
+    if (!host || window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
+      console.warn("SyncService: Running in local/preview environment (blob/file). Real-time sync disabled.");
+      this.isOnline = false;
+      this.notifyStatus(false);
+      return;
+    }
+
+    // 3. Construct valid WebSocket URL
+    const wsUrl = `${wsProtocol}//${host}/api/sync`;
 
     try {
       this.ws = new WebSocket(wsUrl);
     } catch (e) {
-      console.error("WebSocket connection failed", e);
+      console.error("WebSocket connection failed to initialize", e);
       this.scheduleReconnect();
       return;
     }
@@ -59,7 +72,10 @@ class SyncService {
 
     this.ws.onerror = (e) => {
       // Error will usually trigger close, which triggers reconnect
-      console.error("WebSocket error", e);
+      // Check if we are in development to reduce noise
+      if (process.env.NODE_ENV === 'development') {
+        console.log("WebSocket error (expected if worker not running locally):", e);
+      }
     };
   }
 
