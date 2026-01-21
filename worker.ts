@@ -1,39 +1,7 @@
-
-// Cloudflare Worker Types Polyfill
-interface DurableObjectStorage {
-  get<T = any>(key: string): Promise<T | undefined>;
-  put(key: string, value: any): Promise<void>;
-}
-
-interface DurableObjectState {
-  storage: DurableObjectStorage;
-}
-
-interface DurableObjectId {
-  toString(): string;
-}
-
-interface DurableObjectStub {
-  fetch(request: Request): Promise<Response>;
-}
-
-interface DurableObjectNamespace {
-  idFromName(name: string): DurableObjectId;
-  get(id: DurableObjectId): DurableObjectStub;
-}
-
-interface CloudflareWebSocket extends WebSocket {
-  accept(): void;
-}
-
-declare class WebSocketPair {
-  0: CloudflareWebSocket;
-  1: CloudflareWebSocket;
-}
-
+// Cloudflare Workers environment bindings
 interface Env {
   SYNCPAD_DO: DurableObjectNamespace;
-  ASSETS: { fetch: (request: Request) => Promise<Response> };
+  ASSETS: Fetcher;
 }
 
 // Durable Object class for managing sync sessions
