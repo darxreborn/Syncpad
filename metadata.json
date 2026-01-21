@@ -1,0 +1,5 @@
+{
+  "name": "SyncPad Local",
+  "description": "A minimalistic, real-time shared clipboard for your local environment. Features auto-sync, history with AI-generated titles, and a distraction-free interface.",
+  "requestFramePermissions": []
+}
