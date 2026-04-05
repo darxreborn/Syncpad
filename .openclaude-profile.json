@@ -1,0 +1,8 @@
+{
+  "profile": "gemini",
+  "env": {
+    "GEMINI_MODEL": "gemini-3.1-pro-preview",
+    "GEMINI_API_KEY": "AIzaSyDnXQgK4tC7LYgoPZ5ohmoSa8EYae5D_28"
+  },
+  "createdAt": "2026-04-03T19:13:50.606Z"
+}
