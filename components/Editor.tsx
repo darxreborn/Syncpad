@@ -33,7 +33,8 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onBlur }) => {
           padding: { top: 16, bottom: 16 },
           scrollBeyondLastLine: false,
           folding: true,
-          links: true, // Enables cmd/ctrl+click to open links
+          links: true,
+          linkDetector: { openOnClick: true },
           overviewRulerLanes: 0, // Removes right side indicator
           hideCursorInOverviewRuler: true,
           overviewRulerBorder: false,
