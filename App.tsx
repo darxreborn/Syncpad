@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Copy, Check, Wifi, WifiOff, Loader2, Save, ChevronUp, Cloud, PlusSquare } from 'lucide-react';
 import { syncService } from './services/syncService';
-import { generateSnippetSummary } from './services/geminiService';
 import { Snippet, PadMap } from './types';
 import { DEBOUNCE_DELAY_MS, MAX_HISTORY_ITEMS } from './constants';
 import { HistoryDropdown } from './components/HistoryDropdown';
@@ -29,6 +28,8 @@ const App: React.FC = () => {
     lastSavedContentRef.current = initialContent;
     setHistory(syncService.getHistory());
 
+    let syncedTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const unsubscribeContent = syncService.subscribe((newPads) => {
       const newMainContent = newPads['main'] || '';
       if (newMainContent !== lastSavedContentRef.current) {
@@ -36,16 +37,31 @@ const App: React.FC = () => {
         setContent(newMainContent);
         lastSavedContentRef.current = newMainContent;
         setStatus('synced');
-        setTimeout(() => { isRemoteUpdateRef.current = false; setStatus('idle'); }, 1000);
+        syncedTimeoutId = setTimeout(() => {
+          isRemoteUpdateRef.current = false;
+          setStatus('idle');
+        }, 1000);
       }
     });
 
     const unsubscribeStatus = syncService.subscribeStatus((isOnline) => {
-      if (!isOnline) setStatus('offline');
-      else if (status === 'offline') setStatus('idle');
+      setStatus(currentStatus => {
+        if (!isOnline) return 'offline';
+        if (currentStatus === 'offline') return 'idle';
+        return currentStatus;
+      });
     });
 
-    return () => { unsubscribeContent(); unsubscribeStatus(); };
+    return () => {
+      unsubscribeContent();
+      unsubscribeStatus();
+      if (syncedTimeoutId) clearTimeout(syncedTimeoutId);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (saveContentTimeoutRef.current) clearTimeout(saveContentTimeoutRef.current);
+      if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
+      if (justCopiedTimeoutRef.current) clearTimeout(justCopiedTimeoutRef.current);
+    };
   }, []);
 
   const updateContent = (newContent: string) => {
@@ -57,45 +73,57 @@ const App: React.FC = () => {
     autoSaveTimerRef.current = setTimeout(() => addToHistory(newContent, true), AUTO_SAVE_DELAY_MS);
   };
 
+  const saveContentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const saveContent = useCallback(async (newContent: string) => {
     if (newContent === lastSavedContentRef.current) { setStatus('idle'); return; }
     syncService.broadcastUpdate({ main: newContent });
     lastSavedContentRef.current = newContent;
     setStatus('synced');
-    setTimeout(() => setStatus('idle'), 2000);
+    if (saveContentTimeoutRef.current) clearTimeout(saveContentTimeoutRef.current);
+    saveContentTimeoutRef.current = setTimeout(() => setStatus('idle'), 2000);
   }, []);
 
   const addToHistory = (snippetContent: string, isAuto: boolean = false) => {
     setHistory(prev => {
       if (prev.length > 0 && prev[0].content === snippetContent) return prev;
       if (isAuto && snippetContent.trim().length < 5) return prev;
-      const newSnippet: Snippet = { id: Date.now().toString(), content: snippetContent, timestamp: Date.now(), isAiGenerating: true };
+
+      // Generate simple summary from first line or first 50 chars
+      const firstLine = snippetContent.split('\n')[0].trim();
+      const summary = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine || 'Untitled Snippet';
+
+      const newSnippet: Snippet = {
+        id: Date.now().toString(),
+        content: snippetContent,
+        timestamp: Date.now(),
+        summary
+      };
       const updated = [newSnippet, ...prev].slice(0, MAX_HISTORY_ITEMS);
       syncService.saveToHistory(updated);
-      generateSnippetSummary(snippetContent).then(summary => {
-        setHistory(current => {
-          const newHist = current.map(item => item.id === newSnippet.id ? { ...item, summary, isAiGenerating: false } : item);
-          syncService.saveToHistory(newHist);
-          return newHist;
-        });
-      });
       return updated;
     });
   };
+
+  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleManualSave = () => {
     if (!content.trim()) return;
     addToHistory(content);
     setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 2000);
+    if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
+    justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2000);
   };
+
+  const justCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyToClipboard = async () => {
     if (!content) return;
     try {
       await navigator.clipboard.writeText(content);
       setJustCopied(true);
-      setTimeout(() => setJustCopied(false), 2000);
+      if (justCopiedTimeoutRef.current) clearTimeout(justCopiedTimeoutRef.current);
+      justCopiedTimeoutRef.current = setTimeout(() => setJustCopied(false), 2000);
     } catch (err) { console.error('Failed to copy!', err); }
   };
 

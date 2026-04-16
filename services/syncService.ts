@@ -73,7 +73,7 @@ class SyncService {
     this.ws.onerror = (e) => {
       // Error will usually trigger close, which triggers reconnect
       // Check if we are in development to reduce noise
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.log("WebSocket error (expected if worker not running locally):", e);
       }
     };

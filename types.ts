@@ -3,7 +3,6 @@ export interface Snippet {
   content: string;
   timestamp: number;
   summary?: string;
-  isAiGenerating?: boolean;
 }
 
 export interface SyncState {

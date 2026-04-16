@@ -8,7 +8,6 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@monaco-editor/react": "^4.7.0",
     "date-fns": "^3.0.0",
     "lucide-react": "^0.300.0",

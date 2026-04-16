@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Snippet } from '../types';
-import { Clock, Sparkles, Trash2 } from 'lucide-react';
+import { Clock, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface HistoryDropdownProps {
@@ -72,12 +72,7 @@ export const HistoryDropdown: React.FC<HistoryDropdownProps> = ({
                   className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-[#2d333b] transition-colors group"
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-medium text-gray-900 dark:text-gray-200 line-clamp-1 flex items-center gap-1.5">
-                      {snippet.isAiGenerating ? (
-                        <Sparkles size={10} className="text-purple-500 animate-pulse" />
-                      ) : (
-                        <Sparkles size={10} className="text-purple-500/0 group-hover:text-purple-500 transition-colors" />
-                      )}
+                    <span className="text-xs font-medium text-gray-900 dark:text-gray-200 line-clamp-1">
                       {snippet.summary || "Untitled Snippet"}
                     </span>
                     <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2">
