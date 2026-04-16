@@ -1,5 +1,14 @@
-import React from 'react';
-import MonacoEditor, { OnMount } from '@monaco-editor/react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
+import { isMobileDevice } from '../utils';
+import { MobileEditor } from './MobileEditor';
+
+// Lazy load Monaco Editor for desktop only
+const MonacoEditorLazy = lazy(() =>
+  import('./MonacoEditor').catch(() => {
+    console.error('Failed to load Monaco Editor, falling back to mobile editor');
+    return { default: MobileEditor as any };
+  })
+);
 
 interface EditorProps {
   value: string;
@@ -8,44 +17,53 @@ interface EditorProps {
 }
 
 export const Editor: React.FC<EditorProps> = ({ value, onChange, onBlur }) => {
-  const isDarkMode = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isClient, setIsClient] = useState(false);
 
-  const handleEditorMount: OnMount = (editor) => {
-    // Focus on mount
-    editor.focus();
-  };
+  // Detect mobile on client side only
+  useEffect(() => {
+    setIsClient(true);
+    setIsMobile(isMobileDevice());
 
+    // Re-check on resize (e.g., tablet rotation)
+    const handleResize = () => {
+      setIsMobile(isMobileDevice());
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Show nothing during SSR
+  if (!isClient) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-sm text-gray-400">Loading editor...</div>
+      </div>
+    );
+  }
+
+  // Use mobile editor for mobile devices
+  if (isMobile) {
+    return (
+      <div className="flex h-full w-full overflow-hidden" onBlur={onBlur}>
+        <MobileEditor value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  // Lazy load Monaco for desktop
   return (
     <div className="flex h-full w-full overflow-hidden" onBlur={onBlur}>
-      <MonacoEditor
-        height="100%"
-        language="plaintext"
-        value={value}
-        onChange={(val) => onChange(val || '')}
-        theme={isDarkMode ? 'vs-dark' : 'light'}
-        onMount={handleEditorMount}
-        options={{
-          minimap: { enabled: false },
-          fontSize: 14,
-          fontFamily: "'Fira Code', monospace",
-          wordWrap: "on",
-          lineNumbersMinChars: 3,
-          padding: { top: 16, bottom: 16 },
-          scrollBeyondLastLine: false,
-          folding: true,
-          links: true,
-          linkDetector: { openOnClick: true },
-          overviewRulerLanes: 0, // Removes right side indicator
-          hideCursorInOverviewRuler: true,
-          overviewRulerBorder: false,
-          scrollbar: {
-            vertical: 'auto',
-            horizontal: 'auto',
-            verticalScrollbarSize: 10,
-            horizontalScrollbarSize: 10,
-          }
-        }}
-      />
+      <Suspense
+        fallback={
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="text-sm text-gray-400">Loading Monaco Editor...</div>
+          </div>
+        }
+      >
+        <MonacoEditorLazy value={value} onChange={onChange} />
+      </Suspense>
     </div>
   );
 };
