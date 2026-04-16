@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Copy, Check, Wifi, WifiOff, Loader2, Save, ChevronUp, Cloud, PlusSquare } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Copy, Check, Wifi, WifiOff, Loader2, Save, ChevronUp, Cloud, PlusSquare, AlertTriangle } from 'lucide-react';
 import { syncService } from './services/syncService';
 import { Snippet, PadMap } from './types';
-import { DEBOUNCE_DELAY_MS, MAX_HISTORY_ITEMS } from './constants';
+import { DEBOUNCE_DELAY_MS, MAX_HISTORY_ITEMS, MAX_CONTENT_SIZE_BYTES, WARN_CONTENT_SIZE_BYTES } from './constants';
 import { HistoryDropdown } from './components/HistoryDropdown';
 import { Editor } from './components/Editor';
+import { getContentSizeBytes, formatBytes } from './utils';
 
 const AUTO_SAVE_DELAY_MS = 3000;
 
@@ -20,6 +21,12 @@ const App: React.FC = () => {
   const isRemoteUpdateRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Calculate content size in bytes
+  const contentSizeBytes = useMemo(() => getContentSizeBytes(content), [content]);
+  const isNearLimit = contentSizeBytes >= WARN_CONTENT_SIZE_BYTES;
+  const isOverLimit = contentSizeBytes > MAX_CONTENT_SIZE_BYTES;
+  const sizePercentage = (contentSizeBytes / MAX_CONTENT_SIZE_BYTES) * 100;
 
   useEffect(() => {
     const storedPads = syncService.getStoredContent();
@@ -77,6 +84,15 @@ const App: React.FC = () => {
 
   const saveContent = useCallback(async (newContent: string) => {
     if (newContent === lastSavedContentRef.current) { setStatus('idle'); return; }
+
+    // Check content size before syncing
+    const sizeBytes = getContentSizeBytes(newContent);
+    if (sizeBytes > MAX_CONTENT_SIZE_BYTES) {
+      console.warn(`Content exceeds maximum size (${formatBytes(sizeBytes)} > ${formatBytes(MAX_CONTENT_SIZE_BYTES)}). Sync blocked.`);
+      setStatus('offline');
+      return;
+    }
+
     syncService.broadcastUpdate({ main: newContent });
     lastSavedContentRef.current = newContent;
     setStatus('synced');
@@ -207,7 +223,22 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex-1 flex items-center justify-end gap-3">
-              <span className="text-[10px] text-gray-300 dark:text-gray-600 font-mono hidden md:inline">{content.length} chars</span>
+              <div className="hidden md:flex items-center gap-2">
+                {isOverLimit && (
+                  <div className="flex items-center gap-1 text-red-500" title="Content exceeds maximum size">
+                    <AlertTriangle size={12} />
+                    <span className="text-[10px] font-medium">TOO LARGE</span>
+                  </div>
+                )}
+                {isNearLimit && !isOverLimit && (
+                  <div className="flex items-center gap-1 text-yellow-500" title="Approaching size limit">
+                    <AlertTriangle size={12} />
+                  </div>
+                )}
+                <span className={`text-[10px] font-mono ${isOverLimit ? 'text-red-500 font-bold' : isNearLimit ? 'text-yellow-500' : 'text-gray-300 dark:text-gray-600'}`}>
+                  {formatBytes(contentSizeBytes)} / {formatBytes(MAX_CONTENT_SIZE_BYTES)}
+                </span>
+              </div>
               <button 
                 onClick={copyToClipboard}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-sm text-[10px] font-medium transition-colors border ${justCopied ? 'bg-green-50 border-green-200 text-green-600 dark:bg-green-900/10 dark:border-green-800/20 dark:text-green-400' : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50 dark:bg-dark-inner dark:border-gray-700/50 dark:text-gray-400 dark:hover:text-white'}`}
