@@ -1,0 +1,26 @@
+{
+  "name": "SyncPad",
+  "short_name": "SyncPad",
+  "description": "Real-time synchronized notepad with cloud sync",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1c1e20",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "New Snippet",
+      "url": "/?action=new",
+      "description": "Create a new snippet"
+    }
+  ]
+}
