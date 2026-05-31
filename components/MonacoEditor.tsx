@@ -34,7 +34,6 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ value, onChange }) =
         scrollBeyondLastLine: false,
         folding: true,
         links: true,
-        linkDetector: { openOnClick: true },
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
         overviewRulerBorder: false,

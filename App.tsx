@@ -1,26 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Copy, Check, Wifi, WifiOff, Loader2, Save, ChevronUp, Cloud, PlusSquare, AlertTriangle } from 'lucide-react';
 import { syncService } from './services/syncService';
-import { Snippet, PadMap } from './types';
+import { Snippet } from './types';
 import { DEBOUNCE_DELAY_MS, MAX_HISTORY_ITEMS, MAX_CONTENT_SIZE_BYTES, WARN_CONTENT_SIZE_BYTES } from './constants';
 import { HistoryDropdown } from './components/HistoryDropdown';
 import { Editor } from './components/Editor';
 import { getContentSizeBytes, formatBytes } from './utils';
 
-const AUTO_SAVE_DELAY_MS = 3000;
-
 const App: React.FC = () => {
   const [content, setContent] = useState<string>('');
   const [history, setHistory] = useState<Snippet[]>([]);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
-  const [status, setStatus] = useState<'idle' | 'syncing' | 'synced' | 'autosaving' | 'offline'>('idle');
+  const [status, setStatus] = useState<'idle' | 'syncing' | 'synced' | 'offline' | 'tooLarge'>('idle');
   const [justSaved, setJustSaved] = useState<boolean>(false);
   const [justCopied, setJustCopied] = useState<boolean>(false);
 
   const lastSavedContentRef = useRef<string>('');
   const isRemoteUpdateRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Calculate content size in bytes
   const contentSizeBytes = useMemo(() => getContentSizeBytes(content), [content]);
@@ -64,7 +61,6 @@ const App: React.FC = () => {
       unsubscribeStatus();
       if (syncedTimeoutId) clearTimeout(syncedTimeoutId);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       if (saveContentTimeoutRef.current) clearTimeout(saveContentTimeoutRef.current);
       if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
       if (justCopiedTimeoutRef.current) clearTimeout(justCopiedTimeoutRef.current);
@@ -76,8 +72,6 @@ const App: React.FC = () => {
     setStatus('syncing');
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => saveContent(newContent), DEBOUNCE_DELAY_MS);
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => addToHistory(newContent, true), AUTO_SAVE_DELAY_MS);
   };
 
   const saveContentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,7 +83,8 @@ const App: React.FC = () => {
     const sizeBytes = getContentSizeBytes(newContent);
     if (sizeBytes > MAX_CONTENT_SIZE_BYTES) {
       console.warn(`Content exceeds maximum size (${formatBytes(sizeBytes)} > ${formatBytes(MAX_CONTENT_SIZE_BYTES)}). Sync blocked.`);
-      setStatus('offline');
+      syncService.saveLocalContent({ main: newContent });
+      setStatus('tooLarge');
       return;
     }
 
@@ -126,6 +121,7 @@ const App: React.FC = () => {
   const handleManualSave = () => {
     if (!content.trim()) return;
     addToHistory(content);
+    updateContent('');
     setJustSaved(true);
     if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
     justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2000);
@@ -150,6 +146,24 @@ const App: React.FC = () => {
     updateContent('');
   };
 
+  const downloadCurrentContent = () => {
+    if (!content) return;
+
+    const firstLine = content.split('\n')[0].trim();
+    const baseName = (firstLine || 'syncpad-note')
+      .slice(0, 48)
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase() || 'syncpad-note';
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${baseName}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-background dark:bg-dark-outer text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-300">
       
@@ -163,8 +177,9 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-inner/50 h-6 px-2.5" title={status === 'offline' ? 'Offline' : 'Connected'}>
+          <div className="flex items-center rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-inner/50 h-6 px-2.5" title={status === 'tooLarge' ? 'Too large to sync' : status === 'offline' ? 'Offline' : 'Connected'}>
             {status === 'offline' && <WifiOff size={10} className="text-red-500" />}
+            {status === 'tooLarge' && <AlertTriangle size={10} className="text-red-500" />}
             {status === 'syncing' && <Loader2 size={10} className="animate-spin text-blue-500" />}
             {status === 'synced' && <Cloud size={10} className="text-green-500" />}
             {status === 'idle' && <Wifi size={10} className="text-gray-400" />}
@@ -214,7 +229,12 @@ const App: React.FC = () => {
             <div className="flex-1 flex justify-center">
               <button
                 onClick={handleManualSave}
-                disabled={justSaved || !content.trim()}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  downloadCurrentContent();
+                }}
+                disabled={justSaved}
+                title="Save as snippet. Right-click to download as .txt"
                 className={`flex items-center gap-1.5 px-4 py-1 rounded-sm text-[10px] font-bold tracking-wide border transition-all ${justSaved ? 'bg-green-500 text-white border-green-600' : 'bg-white text-gray-700 border-gray-100 hover:border-gray-200 dark:bg-dark-inner dark:text-gray-400 dark:border-gray-700/50 dark:hover:text-white'}`}
               >
                 {justSaved ? <Check size={12} /> : <Save size={12} />}

@@ -2,19 +2,25 @@ import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { isMobileDevice } from '../utils';
 import { MobileEditor } from './MobileEditor';
 
-// Lazy load Monaco Editor for desktop only
-const MonacoEditorLazy = lazy(() =>
-  import('./MonacoEditor').catch(() => {
-    console.error('Failed to load Monaco Editor, falling back to mobile editor');
-    return { default: MobileEditor as any };
-  })
-);
-
 interface EditorProps {
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
 }
+
+const MobileEditorFallback: React.FC<EditorProps> = ({ value, onChange }) => (
+  <MobileEditor value={value} onChange={onChange} />
+);
+
+// Lazy load Monaco Editor for desktop only
+const MonacoEditorLazy = lazy<React.ComponentType<EditorProps>>(() =>
+  import('./MonacoEditor')
+    .then((module) => ({ default: module.default as React.ComponentType<EditorProps> }))
+    .catch(() => {
+      console.error('Failed to load Monaco Editor, falling back to mobile editor');
+      return { default: MobileEditorFallback };
+    })
+);
 
 export const Editor: React.FC<EditorProps> = ({ value, onChange, onBlur }) => {
   const [isMobile, setIsMobile] = useState<boolean>(false);

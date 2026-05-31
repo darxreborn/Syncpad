@@ -11,6 +11,7 @@ class SyncService {
   private reconnectAttempts = 0;
   private maxReconnectDelay = 30000;
   private isOnline = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.connect();
@@ -18,15 +19,17 @@ class SyncService {
 
   private connect() {
     if (typeof window === 'undefined') return;
+    if (this.ws && (
+      this.ws.readyState === WebSocket.OPEN ||
+      this.ws.readyState === WebSocket.CONNECTING
+    )) {
+      return;
+    }
 
-    // 1. Determine safe WebSocket protocol (ws: or wss:)
     const isSecure = window.location.protocol === 'https:';
     const wsProtocol = isSecure ? 'wss:' : 'ws:';
     const host = window.location.host;
 
-    // 2. Handle Environments where relative WebSocket paths are impossible
-    // (e.g., local file system 'file:', or code preview blobs 'blob:')
-    // In these cases, we cannot connect to the worker, so we default to offline mode.
     if (!host || window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
       console.warn("SyncService: Running in local/preview environment (blob/file). Real-time sync disabled.");
       this.isOnline = false;
@@ -34,7 +37,6 @@ class SyncService {
       return;
     }
 
-    // 3. Construct valid WebSocket URL
     const wsUrl = `${wsProtocol}//${host}/api/sync`;
 
     try {
@@ -48,6 +50,10 @@ class SyncService {
     this.ws.onopen = () => {
       this.isOnline = true;
       this.reconnectAttempts = 0;
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
       this.notifyStatus(true);
     };
 
@@ -55,7 +61,6 @@ class SyncService {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'UPDATE' && data.content) {
-          // Update local cache
           localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(data.content));
           this.notifyContent(data.content);
         }
@@ -71,8 +76,6 @@ class SyncService {
     };
 
     this.ws.onerror = (e) => {
-      // Error will usually trigger close, which triggers reconnect
-      // Check if we are in development to reduce noise
       if (import.meta.env.DEV) {
         console.log("WebSocket error (expected if worker not running locally):", e);
       }
@@ -80,9 +83,13 @@ class SyncService {
   }
 
   private scheduleReconnect() {
+    if (this.reconnectTimer) return;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.maxReconnectDelay);
     this.reconnectAttempts++;
-    setTimeout(() => this.connect(), delay);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
   }
 
   public subscribe(callback: ContentCallback): () => void {
@@ -93,7 +100,7 @@ class SyncService {
   }
 
   public subscribeStatus(callback: StatusCallback): () => void {
-    callback(this.isOnline); // Immediately notify of current status
+    callback(this.isOnline);
     this.statusCallbacks.push(callback);
     return () => {
       this.statusCallbacks = this.statusCallbacks.filter(cb => cb !== callback);
@@ -109,13 +116,15 @@ class SyncService {
   }
 
   public broadcastUpdate(content: PadMap) {
-    // Save locally immediately
-    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(content));
-    
-    // Send to server
+    this.saveLocalContent(content);
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'UPDATE', content }));
     }
+  }
+
+  public saveLocalContent(content: PadMap) {
+    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(content));
   }
 
   public getStoredContent(): PadMap {

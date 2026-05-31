@@ -40,6 +40,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   // Skip WebSocket connections
   if (event.request.url.includes('/api/sync')) {
     return;
@@ -49,6 +53,10 @@ self.addEventListener('fetch', (event) => {
     // Try network first
     fetch(event.request)
       .then((response) => {
+        if (!response || !response.ok) {
+          return response;
+        }
+
         // Clone the response before caching
         const responseToCache = response.clone();
 
